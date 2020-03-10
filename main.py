@@ -1,6 +1,10 @@
 import json
 import requests
 import re
+from json2html import json2html
+
+
+SHELTER_ID = '994'
 
 
 def initialize_headers():
@@ -36,15 +40,15 @@ def get_available_cats(headers):
         'mustHavePhoto': False,
         'mustHaveVideo': False,
         'speciesId': '2',
-        'shelterId': '994',
+        'shelterId': SHELTER_ID,
         'happyTails': False,
         'goodWithDogs': False,
         'goodWithCats': False,
-        'recordAmount': 26,
-        'moduleId': 983,
+        'recordAmount': '100',
+        'moduleId': '983',
         'goodWithChildren': False,
         'gender': 'M',
-        'recordOffset': 0
+        'recordOffset': '0',
     }
 
     for age in ['Young', 'Adult']:
@@ -54,6 +58,7 @@ def get_available_cats(headers):
             json=data,
             headers=headers
         )
+
         response_cats = response.json()['items']
         available_cats.extend(response_cats)
 
@@ -68,7 +73,7 @@ def extract_cat_information(available_cats):
             'breed': cat_item['breed'],
             'age': cat_item['age'],
             'url': cat_item['url'],
-            'pictures': [cat_item['photo']]
+            'pictures': [],
         }
 
     return cats_data
@@ -80,22 +85,26 @@ def get_cat_descriptions(cats, headers):
         'clientZip': 'null',
     }
 
+    headers.update({
+        'TabId': '261',
+        'ModuleId': '849',
+        'Content-Type': None,
+        'Origin': None,
+    })
+
     for cat, cat_data in cats.items():
-        params['animalId'] = cat_data['id']
-        headers.update({
-            'Referer': cat_data['url'],
-            'TabId': '261',
-            'ModuleId': '849',
-            'Content-Type': None,
-            'Origin': None,
-        })
+        cat_id = cat_data['id']
+        print('grabbing cat {cat_id}'.format(cat_id=cat_id))
+
+        params['animalId'] = cat_id
+        headers['Referer'] = cat_data['url']
+
         response = requests.get(
             'https://www.petango.com/DesktopModules/Pethealth.Petango/Pethealth.Petango.DnnModules.AnimalDetails/API/Main/GetAnimalDetails',
             headers=headers,
             params=params
         )
         response_json = response.json()
-
         cats[cat]['description'] = response_json['memo']
 
         for key, value in response_json.items():
@@ -106,14 +115,33 @@ def get_cat_descriptions(cats, headers):
     return cats
 
 
-def write_to_file(cats_json):
+def write_json_to_file(cats_json):
     with open('cat_data.json', 'w') as f:
         json.dump(cats_json, f)
 
 
+def write_json_to_html(cats_json):
+    html = json2html.convert(cats_json)
+    transformed_html = re.sub('(http.*?)<', r'<img src="\1" alt=" "><a href="\1">\1</a></img><', html)
+
+    with open('cat_data.html', 'w') as f:
+        f.write(transformed_html)
+
+
 if __name__ == '__main__':
+    print('initializing headers')
     headers = initialize_headers()
+
+    print('grabbing available cats')
     available_cats = get_available_cats(headers)
+
+    print('parsing cat data')
     cats_data = extract_cat_information(available_cats)
+
+    print('grabbing cat descriptions')
     cats = get_cat_descriptions(cats_data, headers)
-    write_to_file(cats)
+
+    print('writing data to file')
+    write_json_to_html(cats)
+
+    print('done')
