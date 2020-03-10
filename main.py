@@ -1,10 +1,13 @@
 import json
 import requests
 import re
+import os
+import webbrowser
 from json2html import json2html
 
 
 SHELTER_ID = "994"
+FILENAME = "cat_data"
 
 
 def initialize_headers():
@@ -66,17 +69,19 @@ def get_available_cats(headers):
 
 
 def extract_cat_information(available_cats):
-    cats_data = {}
-    for cat_item in available_cats:
-        cats_data[cat_item["name"]] = {
-            "id": cat_item["id"],
-            "breed": cat_item["breed"],
-            "age": cat_item["age"],
-            "url": cat_item["url"],
+    data = {}
+    for item in available_cats:
+        identifier = "{name} - {id_number}".format(
+            name=item["name"], id_number=item["id"]
+        )
+        data[identifier] = {
+            "breed": item["breed"],
+            "age": item["age"],
+            "url": item["url"],
             "pictures": [],
         }
 
-    return cats_data
+    return data
 
 
 def get_cat_descriptions(cats, headers):
@@ -89,12 +94,12 @@ def get_cat_descriptions(cats, headers):
         {"TabId": "261", "ModuleId": "849", "Content-Type": None, "Origin": None,}
     )
 
-    for cat, cat_data in cats.items():
-        cat_id = cat_data["id"]
-        print("grabbing cat {cat_id}".format(cat_id=cat_id))
+    for identifier, data in cats.items():
+        print("grabbing cat {identifier}".format(identifier=identifier))
 
-        params["animalId"] = cat_id
-        headers["Referer"] = cat_data["url"]
+        name, id_number = identifier.split(" - ")
+        params["animalId"] = id_number
+        headers["Referer"] = data["url"]
 
         response = requests.get(
             "https://www.petango.com/DesktopModules/Pethealth.Petango/Pethealth.Petango.DnnModules.AnimalDetails/API/Main/GetAnimalDetails",
@@ -102,29 +107,65 @@ def get_cat_descriptions(cats, headers):
             params=params,
         )
         response_json = response.json()
-        cats[cat]["description"] = response_json["memo"]
+        cats[identifier]["description"] = response_json["memo"]
 
         for key, value in response_json.items():
             if "photo" in key.lower():
                 if value:
-                    cats[cat]["pictures"].append(value)
+                    cats[identifier]["pictures"].append(value)
 
     return cats
 
 
-def write_json_to_file(cats_json):
-    with open("cat_data.json", "w") as f:
+def get_differences(old_cats, current_cats):
+    new_cats = current_cats.copy()
+
+    for current_identifier, current_data in current_cats.items():
+        if not old_cats.get(current_identifier):
+            new_identifier = "{identifier} - NEW".format(identifier=current_identifier)
+            new_cats[new_identifier] = new_cats.pop(current_identifier)
+
+    return new_cats
+
+
+def open_json_file_to_json():
+    filename = "{filename}.json".format(filename=FILENAME)
+
+    if not os.path.isfile(filename) or os.stat(filename).st_size == 0:
+        return {}
+
+    with open(filename, "r") as f:
+        cats = json.load(f) or {}
+
+    return cats
+
+
+def write_json_to_json_file(cats_json):
+    filename = "{filename}.json".format(filename=FILENAME)
+
+    cats_dumped = json.dumps(cats_json)
+    cats_dumped = cats_dumped.replace(" - NEW", "")
+    cats_json = json.loads(cats_dumped)
+
+    with open(filename, "w") as f:
         json.dump(cats_json, f)
 
 
-def write_json_to_html(cats_json):
+def write_json_to_html_file(cats_json):
+    filename = "{filename}.html".format(filename=FILENAME)
+
     html = json2html.convert(cats_json)
     transformed_html = re.sub(
         "(http.*?)<", r'<img src="\1" alt=" "><a href="\1">\1</a></img><', html
     )
 
-    with open("cat_data.html", "w") as f:
+    with open(filename, "w") as f:
         f.write(transformed_html)
+
+
+def open_file_in_browser():
+    filename = "{filename}.html".format(filename=FILENAME)
+    webbrowser.open_new_tab("file://" + os.path.realpath(filename))
 
 
 if __name__ == "__main__":
@@ -135,12 +176,20 @@ if __name__ == "__main__":
     available_cats = get_available_cats(headers)
 
     print("parsing cat data")
-    cats_data = extract_cat_information(available_cats)
+    data = extract_cat_information(available_cats)
 
     print("grabbing cat descriptions")
-    cats = get_cat_descriptions(cats_data, headers)
+    cats = get_cat_descriptions(data, headers)
 
-    print("writing data to file")
-    write_json_to_html(cats)
+    old_cats = open_json_file_to_json()
+    if cats == old_cats:
+        print("no new cats")
+    else:
+        print("writing data to file")
+        cats = get_differences(old_cats, cats)
 
+    write_json_to_json_file(cats)
+    write_json_to_html_file(cats)
+
+    open_file_in_browser()
     print("done")
