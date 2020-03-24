@@ -124,6 +124,7 @@ def get_differences(old_cats, current_cats):
         if not old_cats.get(current_identifier):
             new_identifier = "{identifier} - NEW".format(identifier=current_identifier)
             new_cats[new_identifier] = new_cats.pop(current_identifier)
+            print("new cat: {new_identifier}".format(new_identifier=new_identifier))
 
     return new_cats
 
