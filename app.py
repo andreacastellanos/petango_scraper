@@ -1,6 +1,7 @@
 import json
 import requests
 import re
+import time
 import os
 import webbrowser
 from json2html import json2html
@@ -153,7 +154,8 @@ def write_json_to_json_file(cats_json):
 
 
 def write_json_to_html_file(cats_json):
-    filename = "{filename}.html".format(filename=FILENAME)
+    current_time = time.strftime("%m-%d-%Y %I-%M-%S %p")
+    filename = "{filename} - {time}.html".format(filename=FILENAME, time=current_time)
 
     html = json2html.convert(cats_json)
     transformed_html = re.sub(
@@ -163,9 +165,11 @@ def write_json_to_html_file(cats_json):
     with open(filename, "w") as f:
         f.write(transformed_html)
 
+    return filename
 
-def open_file_in_browser():
-    filename = "{filename}.html".format(filename=FILENAME)
+
+def open_file_in_browser(filename):
+    filename = "{filename}.html".format(filename=filename)
     webbrowser.open_new_tab("file://" + os.path.realpath(filename))
 
 
@@ -181,6 +185,7 @@ if __name__ == "__main__":
 
     print("grabbing cat descriptions")
     cats = get_cat_descriptions(data, headers)
+    write_json_to_json_file(cats)
 
     old_cats = open_json_file_to_json()
     if cats == old_cats:
@@ -189,8 +194,7 @@ if __name__ == "__main__":
         print("writing data to file")
         cats = get_differences(old_cats, cats)
 
-    write_json_to_json_file(cats)
-    write_json_to_html_file(cats)
+    filename = write_json_to_html_file(cats)
 
-    open_file_in_browser()
+    open_file_in_browser(filename)
     print("done")
